@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>Store Schedule</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one column of cards; day cards tile on wide screens, stack on phones. */
+  :root {
+    --bg: #f5f4f1; --card: #ffffff; --ink: #1d1c1a; --muted: #6b6862;
+    --line: #e2dfd8; --accent: #c2410c; --accent-soft: #fdefe6; --ok: #15803d; --danger: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#151413; --card:#1f1e1c; --ink:#f2f1ee; --muted:#a3a09a; --line:#34322f; --accent:#fb923c; --accent-soft:#2b1e14; --ok:#4ade80; --danger:#f87171; color-scheme: dark; }
+  }
+  :root[data-theme="dark"] { --bg:#151413; --card:#1f1e1c; --ink:#f2f1ee; --muted:#a3a09a; --line:#34322f; --accent:#fb923c; --accent-soft:#2b1e14; --ok:#4ade80; --danger:#f87171; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 22px; margin: 4px 0 2px; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  .sub { color: var(--muted); margin-bottom: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 14px; min-width: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+  button.icon { padding: 4px 9px; }
+  input, select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; }
+  .weeklabel { font-weight: 600; min-width: 190px; text-align: center; }
+  .status { color: var(--muted); font-size: 13px; }
+
+  .emp { display: grid; grid-template-columns: 1fr 110px auto; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .money { position: relative; }
+  .money input { width: 100%; padding-left: 20px; }
+  .money::before { content: "$"; position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 13px; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.total td { font-weight: 700; border-bottom: none; }
+  .big { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .stat { flex: 1 1 140px; background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 13px; }
+
+  .days { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+  .day { margin-bottom: 0; }
+  .day h2 { display: flex; justify-content: space-between; gap: 8px; }
+  .day h2 small { color: var(--muted); font-weight: 500; }
+  .shift { display: grid; grid-template-columns: 70px 1fr 1fr 46px; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .shift .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shift input[type=time] { width: 100%; }
+  .shift .hrs { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+  .shift.on .hrs { color: var(--ok); font-weight: 600; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .empty { color: var(--muted); padding: 8px 0; }
+
+  .dialog { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 20; }
+  .dialog .box { background: var(--card); color: var(--ink); border-radius: 12px; padding: 16px; width: min(420px, 100%); border: 1px solid var(--line); }
+  .dialog textarea { width: 100%; min-height: 140px; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 8px 0; }
+
+  @media (max-width: 520px) {
+    .weeklabel { min-width: 0; flex: 1; }
+    .days { grid-template-columns: 1fr; }
+  }
+  @media print {
+    body { background: #fff; color: #000; }
+    .noprint { display: none !important; }
+    .card { border: 1px solid #999; break-inside: avoid; }
+  }
+</style>
+
+<div class="wrap">
+  <h1>Store Schedule</h1>
+  <div class="sub">Pick a week, enter shifts, and hours and wages add up automatically. <span id="syncNote"></span></div>
+
+  <div class="card">
+    <div class="row">
+      <button class="icon" id="prev" aria-label="Previous week">&#8592;</button>
+      <div class="weeklabel" id="weekLabel"></div>
+      <button class="icon" id="next" aria-label="Next week">&#8594;</button>
+      <button id="today" class="noprint">This week</button>
+      <span style="flex:1"></span>
+      <button id="copyPrev" class="noprint">Copy last week</button>
+      <button id="clearWeek" class="noprint">Clear week</button>
+      <button id="csv" class="noprint localonly">Export CSV</button>
+      <button id="print" class="primary noprint localonly">Print</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Totals for the week</h2>
+    <div class="big">
+      <div class="stat"><b id="totHours">0</b><span>total hours</span></div>
+      <div class="stat"><b id="totCost">$0.00</b><span>total wages</span></div>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Name</th><th class="n">Shifts</th><th class="n">Hours</th><th class="n">Rate</th><th class="n">Pay</th><th class="noprint"></th></tr></thead>
+        <tbody id="summary"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="days" id="days"></div>
+
+  <div class="card noprint" style="margin-top:14px">
+    <h2>Employees &amp; wage rates</h2>
+    <div id="emps"></div>
+    <div class="row" style="margin-top:6px">
+      <button id="addEmp">+ Add employee</button>
+      <span class="hint">Rate is per hour. Leave it at 0 for anyone who isn't paid hourly.</span>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label class="hint" for="startDay">Week starts on</label>
+      <select id="startDay">
+        <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+        <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
+      </select>
+    </div>
+  </div>
+  <p class="hint noprint">Closing: Mon–Thu 10pm, Fri–Sat 11pm, Sun 9pm. Typing a start time fills in closing time as the end. Overnight shifts (end earlier than start) count past midnight.</p>
+</div>
+
+<div class="dialog" id="dialog" hidden>
+  <div class="box">
+    <div id="dlgMsg"></div>
+    <textarea id="dlgText" hidden readonly></textarea>
+    <div class="row" style="justify-content:flex-end;margin-top:12px">
+      <button id="dlgCancel">Cancel</button>
+      <button id="dlgOk" class="primary">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const LKEY = 'storeSchedule.v1';
+const uid = () => Math.random().toString(36).slice(2, 9);
+const DEFAULT_WAGES = { Burhan: 0, Tasneem: 0, Nathan: 17.95, Will: 17.95 };
+// Closing time by day of week (0 = Sunday). Shifts ending at closing show as "Close".
+const CLOSE = { 0: '21:00', 1: '22:00', 2: '22:00', 3: '22:00', 4: '22:00', 5: '23:00', 6: '23:00' };
+const inViewer = !!(window.claude && window.claude.use);
+if (inViewer) document.querySelectorAll('.localonly').forEach(el => el.hidden = true);
+
+let db = null;            // online store when available
+let loaded = !inViewer;   // false until the online data arrives
+let state = { startDay: 1, employees: [], weeks: {} };
+
+// ---- local fallback ----
+function loadLocal() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(LKEY)); } catch (e) {}
+  if (!s || !s.employees) s = {
+    startDay: 1,
+    employees: Object.keys(DEFAULT_WAGES).map(name => ({ id: uid(), name, wage: DEFAULT_WAGES[name] })),
+    weeks: {}
+  };
+  return s;
+}
+function saveLocal() { try { localStorage.setItem(LKEY, JSON.stringify(state)); } catch (e) {} }
+
+// ---- saving (online: one queued write per document) ----
+const queue = {}, timers = {};
+function writeDoc(path, getData) {
+  clearTimeout(timers[path]);
+  timers[path] = setTimeout(() => {
+    const data = getData();
+    queue[path] = (queue[path] || Promise.resolve())
+      .then(() => db.doc(path).set(data))
+      .then(() => setNote('Saved'))
+      .catch(e => setNote(e && e.code === 'invalid_argument' ? 'You can view this schedule but not change it.' : 'Couldn’t save. Check your connection and try again.'));
+  }, 300);
+}
+function saveConfig() {
+  if (!db) return saveLocal();
+  setNote('Saving…');
+  writeDoc('config/main', () => ({ startDay: state.startDay, employees: state.employees }));
+}
+function saveWeek(k) {
+  if (!db) return saveLocal();
+  setNote('Saving…');
+  writeDoc('weeks/' + k, () => ({ shifts: state.weeks[k] || {} }));
+}
+function setNote(t) { document.getElementById('syncNote').textContent = t; }
+
+// ---- dates ----
+const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+function weekStartOf(d) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() - state.startDay + 7) % 7)); return x; }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+const fmt = (d, o) => d.toLocaleDateString(undefined, o);
+let weekStart = weekStartOf(new Date());
+
+// ---- math ----
+function mins(t) { if (!t) return null; const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+function shiftHours(sh) {
+  if (!sh) return 0; const s = mins(sh.s), e = mins(sh.e);
+  if (s == null || e == null) return 0;
+  let diff = e - s; if (diff <= 0) diff += 1440;
+  return diff / 60;
+}
+const money = n => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const hrs = n => (Math.round(n * 100) / 100).toString();
+const wk = () => iso(weekStart);
+function week() { const k = wk(); return state.weeks[k] || (state.weeks[k] = {}); }
+function getShift(empId, i) { return ((state.weeks[wk()] || {})[empId] || {})[i]; }
+
+// ---- render ----
+function render() {
+  const end = addDays(weekStart, 6);
+  document.getElementById('weekLabel').textContent = `${fmt(weekStart, {month:'short', day:'numeric'})} – ${fmt(end, {month:'short', day:'numeric', year:'numeric'})}`;
+  document.getElementById('startDay').value = state.startDay;
+  renderDays(); renderEmps(); renderSummary();
+}
+
+function renderDays() {
+  const box = document.getElementById('days'); box.innerHTML = '';
+  if (!loaded) { box.innerHTML = '<div class="card empty">Loading the schedule…</div>'; return; }
+  if (!state.employees.length) { box.innerHTML = '<div class="card empty">No employees yet. Add your team under “Employees &amp; wage rates” below, then enter shifts here.</div>'; return; }
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(weekStart, i);
+    const card = document.createElement('div'); card.className = 'card day';
+    card.innerHTML = `<h2><span>${fmt(d, {weekday:'long'})} <small>${fmt(d, {month:'short', day:'numeric'})}</small></span><small data-dayhrs="${i}"></small></h2>`;
+    state.employees.forEach(emp => {
+      const sh = getShift(emp.id, i) || {};
+      const row = document.createElement('div'); row.className = 'shift';
+      row.innerHTML = `<div class="name" title="${esc(emp.name)}">${esc(emp.name) || '—'}</div>
+        <input type="time" id="s-${emp.id}-${i}" aria-label="${esc(emp.name)} start" value="${sh.s || ''}" step="900">
+        <input type="time" id="e-${emp.id}-${i}" aria-label="${esc(emp.name)} end" value="${sh.e || ''}" step="900">
+        <div class="hrs"></div>`;
+      const [sIn, eIn] = row.querySelectorAll('input');
+      const upd = () => {
+        if (sIn.value && !eIn.value) eIn.value = CLOSE[d.getDay()];
+        const w = week(); w[emp.id] = w[emp.id] || {};
+        if (!sIn.value && !eIn.value) delete w[emp.id][i]; else w[emp.id][i] = { s: sIn.value, e: eIn.value };
+        saveWeek(wk()); paintRow(row, w[emp.id][i]); renderSummary();
+      };
+      sIn.addEventListener('change', upd); eIn.addEventListener('change', upd);
+      paintRow(row, sh);
+      card.appendChild(row);
+    });
+    box.appendChild(card);
+  }
+}
+function paintRow(row, sh) {
+  const h = shiftHours(sh);
+  row.classList.toggle('on', h > 0);
+  row.querySelector('.hrs').textContent = h > 0 ? hrs(h) + 'h' : (sh && (sh.s || sh.e) ? '…' : '');
+}
+
+function renderEmps() {
+  const box = document.getElementById('emps'); box.innerHTML = '';
+  state.employees.forEach((emp, idx) => {
+    const row = document.createElement('div'); row.className = 'emp';
+    row.innerHTML = `<input type="text" id="n-${emp.id}" placeholder="Name" value="${esc(emp.name)}">
+      <div class="money"><input type="number" id="w-${emp.id}" min="0" step="0.05" inputmode="decimal" value="${emp.wage || ''}" placeholder="0.00" aria-label="Hourly rate"></div>
+      <button class="icon" title="Remove" aria-label="Remove ${esc(emp.name)}">&#10005;</button>`;
+    const [nIn, wIn] = row.querySelectorAll('input');
+    nIn.addEventListener('change', () => { emp.name = nIn.value.trim(); saveConfig(); renderDays(); renderSummary(); });
+    wIn.addEventListener('input', () => { emp.wage = parseFloat(wIn.value) || 0; renderSummary(); });
+    wIn.addEventListener('change', () => saveConfig());
+    row.querySelector('button').addEventListener('click', async () => {
+      if (!await ask(`Remove ${emp.name || 'this employee'}? Their past shifts stay saved but won't show.`, 'Remove', true)) return;
+      state.employees.splice(idx, 1); saveConfig(); render();
+    });
+    box.appendChild(row);
+  });
+}
+
+function totals() {
+  const rows = state.employees.map(emp => {
+    let h = 0, n = 0;
+    for (let i = 0; i < 7; i++) { const x = shiftHours(getShift(emp.id, i)); if (x > 0) { h += x; n++; } }
+    return { emp, h, n, pay: h * (emp.wage || 0) };
+  });
+  const dayHrs = [...Array(7)].map((_, i) => state.employees.reduce((a, emp) => a + shiftHours(getShift(emp.id, i)), 0));
+  return { rows, dayHrs };
+}
+
+function renderSummary() {
+  const { rows, dayHrs } = totals();
+  let H = 0, P = 0;
+  document.getElementById('summary').innerHTML = rows.map(r => {
+    H += r.h; P += r.pay;
+    return `<tr><td>${esc(r.emp.name) || '—'}</td><td class="n">${r.n}</td><td class="n">${hrs(r.h)}</td><td class="n">${r.emp.wage ? money(r.emp.wage) : '—'}</td><td class="n">${money(r.pay)}</td>
+      <td class="n noprint">${r.n ? `<button class="icon copymsg" data-emp="${r.emp.id}">Copy msg</button>` : ''}</td></tr>`;
+  }).join('') + `<tr class="total"><td>Total</td><td class="n">${rows.reduce((a, r) => a + r.n, 0)}</td><td class="n">${hrs(H)}</td><td></td><td class="n">${money(P)}</td><td class="noprint"></td></tr>`;
+  document.querySelectorAll('.copymsg').forEach(b => b.onclick = () => copyText(scheduleMsg(b.dataset.emp), b));
+  document.getElementById('totHours').textContent = hrs(H);
+  document.getElementById('totCost').textContent = money(P);
+  dayHrs.forEach((h, i) => { const el = document.querySelector(`[data-dayhrs="${i}"]`); if (el) el.textContent = h ? hrs(h) + ' hrs' : ''; });
+}
+
+// ---- schedule message ----
+function prettyTime(t) {
+  const [h, m] = t.split(':').map(Number);
+  const ap = h < 12 ? 'am' : 'pm', h12 = h % 12 || 12;
+  return m ? `${h12}:${String(m).padStart(2, '0')}${ap}` : `${h12}${ap}`;
+}
+function scheduleMsg(empId) {
+  const thisWeek = weekStartOf(new Date()), cur = wk();
+  const head = cur === iso(addDays(thisWeek, 7)) ? 'Schedule for next week'
+    : cur === iso(thisWeek) ? 'Schedule for this week'
+    : `Schedule for week of ${fmt(weekStart, { month: 'short', day: 'numeric' })}`;
+  const lines = [head];
+  for (let i = 0; i < 7; i++) {
+    const sh = getShift(empId, i), d = addDays(weekStart, i);
+    if (!sh || !sh.s || !sh.e) continue;
+    const end = sh.e === CLOSE[d.getDay()] ? 'Close' : prettyTime(sh.e);
+    lines.push(`${fmt(d, { weekday: 'long' })}: ${prettyTime(sh.s)} to ${end}`);
+  }
+  return lines.join('\n');
+}
+function copyText(text, btn) {
+  const done = () => { const old = btn.textContent; btn.textContent = 'Copied ✓'; setTimeout(() => btn.textContent = old, 1500); };
+  const fallback = () => showText('Copy this message:', text);
+  try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
+}
+
+// ---- in-page dialog (the viewer blocks alert/confirm/prompt) ----
+const dlg = document.getElementById('dialog');
+function openDialog(msg, { okLabel = 'OK', cancel = true, danger = false, text = null } = {}) {
+  return new Promise(resolve => {
+    document.getElementById('dlgMsg').textContent = msg;
+    const ta = document.getElementById('dlgText');
+    ta.hidden = text == null; if (text != null) ta.value = text;
+    const ok = document.getElementById('dlgOk'), no = document.getElementById('dlgCancel');
+    ok.textContent = okLabel; ok.className = danger ? 'danger' : 'primary'; no.hidden = !cancel;
+    dlg.hidden = false;
+    if (text != null) { ta.focus(); ta.select(); } else ok.focus();
+    const close = v => { dlg.hidden = true; ok.onclick = no.onclick = null; resolve(v); };
+    ok.onclick = () => close(true); no.onclick = () => close(false);
+  });
+}
+const ask = (msg, okLabel, danger) => openDialog(msg, { okLabel, danger });
+const tell = msg => openDialog(msg, { cancel: false });
+const showText = (msg, text) => openDialog(msg, { cancel: false, okLabel: 'Done', text });
+
+function esc(s) { return String(s || '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c])); }
+
+// ---- actions ----
+document.getElementById('prev').onclick = () => { weekStart = addDays(weekStart, -7); render(); };
+document.getElementById('next').onclick = () => { weekStart = addDays(weekStart, 7); render(); };
+document.getElementById('today').onclick = () => { weekStart = weekStartOf(new Date()); render(); };
+document.getElementById('addEmp').onclick = () => {
+  state.employees.push({ id: uid(), name: '', wage: 0 }); saveConfig(); render();
+  const ins = document.querySelectorAll('#emps .emp input[type=text]'); ins[ins.length - 1].focus();
+};
+document.getElementById('copyPrev').onclick = async () => {
+  const prev = state.weeks[iso(addDays(weekStart, -7))];
+  if (!prev || !Object.values(prev).some(o => Object.keys(o).length)) return tell('Last week has no shifts to copy.');
+  const cur = state.weeks[wk()] || {};
+  if (Object.values(cur).some(o => Object.keys(o).length) && !await ask('Replace this week’s shifts with last week’s?', 'Replace', true)) return;
+  state.weeks[wk()] = JSON.parse(JSON.stringify(prev)); saveWeek(wk()); render();
+};
+document.getElementById('clearWeek').onclick = async () => {
+  if (!await ask('Clear all shifts for this week?', 'Clear week', true)) return;
+  state.weeks[wk()] = {}; saveWeek(wk()); render();
+};
+document.getElementById('print').onclick = () => window.print();
+document.getElementById('startDay').onchange = e => {
+  state.startDay = +e.target.value; saveConfig(); weekStart = weekStartOf(weekStart); render();
+};
+document.getElementById('csv').onclick = () => {
+  const lines = [['Name', ...[...Array(7)].map((_, i) => fmt(addDays(weekStart, i), {weekday:'short', month:'short', day:'numeric'})), 'Hours', 'Rate', 'Pay']];
+  totals().rows.forEach(r => lines.push([r.emp.name, ...[...Array(7)].map((_, i) => { const s = getShift(r.emp.id, i); return s && s.s && s.e ? `${s.s}-${s.e}` : ''; }), hrs(r.h), r.emp.wage || 0, r.pay.toFixed(2)]));
+  const csv = lines.map(l => l.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `schedule-${wk()}.csv`; a.click();
+};
+
+// ---- start ----
+async function start() {
+  if (inViewer) {
+    render();
+    try { db = await window.claude.use('db'); } catch (e) { db = null; }
+  }
+  if (!db) { state = loadLocal(); loaded = true; weekStart = weekStartOf(new Date()); render(); if (inViewer) setNote('Saved in this browser only.'); return; }
+
+  const slow = setTimeout(() => setNote('Can’t reach the saved schedule yet. Check your connection.'), 10000);
+  db.doc('config/main').onSnapshot(snap => {
+    if (!snap.metadata.fromCache) clearTimeout(slow);
+    const d = snap.exists ? snap.data() : { startDay: 1, employees: [] };
+    const next = { startDay: d.startDay ?? 1, employees: JSON.parse(JSON.stringify(d.employees || [])) };
+    const same = JSON.stringify(next) === JSON.stringify({ startDay: state.startDay, employees: state.employees });
+    if (same && loaded) return;
+    const startChanged = next.startDay !== state.startDay;
+    state.startDay = next.startDay; state.employees = next.employees; loaded = true;
+    if (startChanged) weekStart = weekStartOf(weekStart);
+    setNote('Saved online — open this page on any device.');
+    render();
+  }, () => { clearTimeout(slow); setNote('Couldn’t load the saved schedule. Reload the page to try again.'); });
+
+  db.collection('weeks').onSnapshot(snap => {
+    let changed = false;
+    snap.docs.forEach(doc => {
+      const shifts = (doc.data() || {}).shifts || {};
+      if (JSON.stringify(shifts) !== JSON.stringify(state.weeks[doc.id] || {})) { state.weeks[doc.id] = JSON.parse(JSON.stringify(shifts)); changed = true; }
+    });
+    if (changed && loaded) render();
+  }, () => {});
+}
+start();
+</script>
+
+</body>
+</html>
